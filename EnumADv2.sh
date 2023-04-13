@@ -1,10 +1,10 @@
 #!/bin/bash
 
 #IF UNKNOWN LEAVE BLANK
-DOMAINIP="192.168.0.44"
-DOMAIN="hatter.local" 
-USER="alice"
-PASS="P@ssw0rd1"
+DOMAINIP=""
+DOMAIN="" 
+USER=""
+PASS=""
 NTHASH="" #if you have an NT has put here
 
 #Color variables
